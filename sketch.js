@@ -1,62 +1,92 @@
-/*
- * 👋 Hello! This is an ml5.js example made and shared with ❤️.
- * Learn more about the ml5.js project: https://ml5js.org/
- * ml5.js license and Code of Conduct: https://github.com/ml5js/ml5-next-gen/blob/main/LICENSE.md
- *
- * This example demonstrates tracking a particular face feature through ml5.faceMesh.
- */
+// Hand Pose Drawing with Variable Stroke Width  
+// https://thecodingtrain.com/tracks/ml5js-beginners-guide/ml5/hand-pose
 
-let faceMesh;
 let video;
-let faces = [];
-let options = { maxFaces: 1, refineLandmarks: false, flipHorizontal: false };
+let handPose;
+let hands = [];
+let painting;
+let px = 0;
+let py = 0;
+let sw = 8;
 
 function preload() {
-  // Load the faceMesh model
-  faceMesh = ml5.faceMesh(options);
+  // Initialize HandPose model with flipped video input
+  handPose = ml5.handPose({ flipped: true });
+}
+
+function mousePressed() {
+  // Log detected hand data to the console
+  console.log(hands);
+}
+
+function gotHands(results) {
+  hands = results;
 }
 
 function setup() {
   createCanvas(640, 480);
-  // Create the webcam video and hide it
-  video = createCapture(VIDEO);
-  video.size(640, 480);
+  
+  // Create an off-screen graphics buffer for painting
+  painting = createGraphics(640, 480);
+  painting.clear();
+
+  video = createCapture(VIDEO, { flipped: true });
   video.hide();
-  // Start detecting faces from the webcam video
-  faceMesh.detectStart(video, gotFaces);
+  
+  // Start detecting hands
+  handPose.detectStart(video, gotHands);
 }
 
 function draw() {
-  // Draw the webcam video
-  image(video, 0, 0, width, height);
+  image(video, 0, 0);
 
-  if (faces.length > 0 && faces[0].lips) {
-    fill(0, 255, 0);
-    rect(
-      faces[0].lips.x,
-      faces[0].lips.y,
-      faces[0].lips.width,
-      faces[0].lips.height
-    );
-  }
+  if (hands.length > 0) {
+    let rightHand, leftHand;
 
-  drawPartsKeypoints();
-}
+    // Separate detected hands into left and right
+    for (let hand of hands) {
+      if (hand.handedness == 'Right') {
+        let index = hand.index_finger_tip;
+        let thumb = hand.thumb_tip;
+        rightHand = { index, thumb };
+      }
+      if (hand.handedness == 'Left') {
+        let index = hand.index_finger_tip;
+        let thumb = hand.thumb_tip;
+        leftHand = { index, thumb };
+      }
+    }
 
-// Draw keypoints for specific face element positions
-function drawPartsKeypoints() {
-  // If there is at least one face
-  if (faces.length > 0) {
-    for (let i = 0; i < faces[0].lips.keypoints.length; i++) {
-      let lips = faces[0].lips.keypoints[i];
-      fill(0, 255, 0);
-      circle(lips.x, lips.y, 5);
+    // Adjust stroke width based on left-hand pinch distance
+    if (leftHand) {
+      let { index, thumb } = leftHand;
+      let x = (index.x + thumb.x) * 0.5;
+      let y = (index.y + thumb.y) * 0.5;
+      sw = dist(index.x, index.y, thumb.x, thumb.y);
+
+      fill(255, 0, 255);
+      noStroke();
+      circle(x, y, sw);
+    }
+
+    // Draw with right-hand pinch
+    if (rightHand) {
+      let { index, thumb } = rightHand;
+      let x = (index.x + thumb.x) * 0.5;
+      let y = (index.y + thumb.y) * 0.5;
+      
+      let d = dist(index.x, index.y, thumb.x, thumb.y);
+      if (d < 20) {
+        painting.stroke(255, 255, 0);
+        painting.strokeWeight(sw * 0.5);
+        painting.line(px, py, x, y);
+      }
+
+      px = x;
+      py = y;
     }
   }
-}
 
-// Callback function for when faceMesh outputs data
-function gotFaces(results) {
-  // Save the output to the faces variable
-  faces = results;
+  // Overlay painting on top of the video
+  image(painting, 0, 0);
 }
